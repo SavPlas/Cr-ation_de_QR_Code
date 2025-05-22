@@ -109,7 +109,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
     # !!! L'URL DE VOTRE GOOGLE APPS SCRIPT DÉPLOYÉ !!!
     # C'est l'URL que vous obtenez après avoir déployé votre Apps Script en tant qu'Application Web.
     # Assurez-vous qu'elle est bien celle de votre déploiement actuel.
-    APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyIMZPGCA_NC6GnNpgXCynP7Q8_Hn1IDRh_88cJfsqsCdfpVYOIgUyWoX07MzOePw8/exec"
+    APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz5ENvHqHkjLCxi8qKsJQ6U5QsjUaM78eMghP3hXgBSz-aWHeXqZVKNi64vprUly3g/exec"
 
     try:
         # 1. Uploader l'image du QR code vers Google Drive

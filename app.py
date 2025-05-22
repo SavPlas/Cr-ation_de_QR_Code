@@ -225,7 +225,13 @@ if page_url:
         with col1:
             st.download_button(
                 label="Télécharger le Code QR (PNG)",
-                data=io.BytesIO(qr_image_final.tobytes(format="PNG")), # Assurez-vous que c'est bien formaté
+                # Préparer l'image pour le téléchargement
+                download_buffer = io.BytesIO()
+                qr_image_final.save(download_buffer, format="PNG")
+                download_buffer.seek(0) # IMPORTANT : revenir au début du buffer
+                
+                label="Télécharger le Code QR (PNG)",
+                data=download_buffer, # Passe directement l'objet BytesIO
                 file_name="code_qr_lpeth.png",
                 mime="image/png"
             )

@@ -5,7 +5,7 @@ import io
 import os
 import requests # Indispensable pour appeler l'Apps Script !
 
-# Google API client libraries
+# Bibliothèques clientes Google API
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -31,6 +31,7 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     qr_width, qr_height = qr_img.size
 
+    # Vérifie si le fichier logo existe
     if not os.path.exists(logo_path):
         st.error(f"Erreur : Le fichier logo '{logo_path}' est introuvable. "
                  "Veuillez vous assurer qu'il est dans le même répertoire que app.py "
@@ -139,7 +140,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         response = requests.post(
             APPS_SCRIPT_WEB_APP_URL,
             # Les paramètres 'docId' et 'imageId' sont passés à la fonction doPost() de l'Apps Script
-            # MODIFICATION : Utilisation de 'data' au lieu de 'params' pour envoyer en form-data
+            # MODIFICATION CLÉ : Utilisation de 'data' au lieu de 'params' pour envoyer en form-data
             data={'docId': document_id, 'imageId': image_id} 
         )
         
@@ -150,7 +151,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
             st.success("Code QR inséré et centré horizontalement dans le document via Google Apps Script.")
         else:
             # Si le script Apps Script renvoie une erreur, nous l'affichons ici.
-            error_message = response_json.get('error', f"Erreur inconnue (Status Code: {response.status_code}, Réponse: {response.text})")
+            error_message = response_json.get('error', f"Erreur inconnue (Code de statut : {response.status_code}, Réponse : {response.text})")
             st.error(f"Erreur lors de l'insertion via Google Apps Script : {error_message}")
 
 

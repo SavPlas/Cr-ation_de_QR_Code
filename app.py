@@ -108,7 +108,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
     # !!! L'URL DE VOTRE GOOGLE APPS SCRIPT DÉPLOYÉ !!!
     # C'est l'URL que vous obtenez après avoir déployé votre Apps Script en tant qu'Application Web.
     # Assurez-vous qu'elle est bien celle de votre déploiement actuel.
-    APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz5ENvHqHkjLCxi8qKsJQ6U5QsjUaM78eMghP3hXgBSz-aWHeXqZVKNi64vprUly3g/exec"
+    APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyIMZPGCA_NC6GnNpgXCynP7Q8_Hn1IDRh_88cJfsqsCdfpVYOIgUyWoX07MzOePw8/exec"
 
     try:
         # 1. Uploader l'image du QR code vers Google Drive
@@ -139,7 +139,8 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         response = requests.post(
             APPS_SCRIPT_WEB_APP_URL,
             # Les paramètres 'docId' et 'imageId' sont passés à la fonction doPost() de l'Apps Script
-            params={'docId': document_id, 'imageId': image_id} 
+            # MODIFICATION : Utilisation de 'data' au lieu de 'params' pour envoyer en form-data
+            data={'docId': document_id, 'imageId': image_id} 
         )
         
         # Le script Apps Script est configuré pour renvoyer un JSON.
@@ -172,7 +173,7 @@ st.title("Générateur de QR Code avec logo LPETH et création Google Docs")
 st.markdown("---")
 
 st.write("Bienvenue ! Entrez l'URL de la page pour laquelle vous souhaitez générer un code QR. "
-          "Le logo LPETH sera inséré et un nouveau document Google Docs pourra être créé avec le QR code.")
+         "Le logo LPETH sera inséré et un nouveau document Google Docs pourra être créé avec le QR code.")
 
 page_url = st.text_input("Veuillez insérer l'URL de la page ici :", "")
 
@@ -228,3 +229,4 @@ else:
 
 st.markdown("---")
 st.markdown("Développé avec ❤️ pour LPETH via Streamlit et Google APIs")
+

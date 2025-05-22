@@ -59,26 +59,25 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
 
 def get_google_service():
     """Authentifie et retourne les services Google Docs et Drive."""
-    # Accéder au secret JSON stocké dans Streamlit
-    # L'ancienne version utilisait "GOOGLE_CREDENTIALS" comme clé unique.
-    # La nouvelle structure est directement les clés du JSON.
-    required_keys = ["type", "project_id", "private_key_id", "private_key",
-                     "client_email", "client_id", "auth_uri", "token_uri",
-                     "auth_provider_x509_cert_url", "client_x509_cert_url",
-                     "universe_domain"]
+    # Liste de toutes les clés attendues dans les secrets pour les identifiants Google
+    required_keys = [
+        "type", "project_id", "private_key_id", "private_key",
+        "client_email", "client_id", "auth_uri", "token_uri",
+        "auth_provider_x509_cert_url", "client_x509_cert_url",
+        "universe_domain"
+    ]
 
     # Vérifiez si toutes les clés nécessaires sont présentes dans st.secrets
+    credentials_info = {}
     for key in required_keys:
         if key not in st.secrets:
             st.error(f"Clé manquante dans les secrets Streamlit : '{key}'. "
-                     "Veuillez vérifier votre configuration des secrets (Streamlit Cloud ou .streamlit/secrets.toml).")
-            st.stop()
-
-    # Construire le dictionnaire des identifiants directement à partir de st.secrets
-    credentials_info = {key: st.secrets[key] for key in required_keys}
+                     "Veuillez vérifier votre configuration des secrets (.streamlit/secrets.toml).")
+            st.stop() # Arrête l'exécution de l'application
+        credentials_info[key] = st.secrets[key] # Ajoutez la clé et sa valeur au dictionnaire
 
     try:
-        # Utiliser from_service_account_info pour authentifier sans fichier temporaire
+        # Utiliser from_service_account_info pour authentifier directement depuis le dictionnaire
         creds = service_account.Credentials.from_service_account_info(
             credentials_info, scopes=SCOPES
         )

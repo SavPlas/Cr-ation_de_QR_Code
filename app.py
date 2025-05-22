@@ -115,22 +115,24 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         target_size_pt = 141.73
 
         requests = [
+            # Insérer l'image au début du document
             {
                 'insertImage': {
                     'uri': f'https://drive.google.com/uc?id={image_id}',
-                    'imageProperties': {
-                        'contentUri': f'https://drive.google.com/uc?id={image_id}',
-                        'size': {
-                            'width': { 'magnitude': target_size_pt, 'unit': 'PT' },
-                            'height': { 'magnitude': target_size_pt, 'unit': 'PT' }
-                        }
-                    },
                     'location': {
                         'segmentId': '',
                         'index': 1
+                    },
+                    'imageProperties': { # Ceci doit être un objet ImageProperties
+                        'contentUri': f'https://drive.google.com/uc?id={image_id}',
+                        'size': { # Ceci doit être un objet Size
+                            'width': { 'magnitude': target_size_pt, 'unit': 'PT' },
+                            'height': { 'magnitude': target_size_pt, 'unit': 'PT' }
+                        }
                     }
                 }
             },
+            # Centrer horizontalement le paragraphe contenant l'image
             {
                 'updateParagraphStyle': {
                     'range': {

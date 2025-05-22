@@ -171,7 +171,7 @@ st.markdown("---")
 st.write("Bienvenue ! Entrez l'URL de la page pour laquelle vous souhaitez générer un code QR. "
           "Le logo LPETH sera inséré et un nouveau document Google Docs pourra être créé avec le QR code.")
 
-page_url = st.text_input("Veuillez insérer l'URL de la page ici :", "https://www.lpeth.be")
+page_url = st.text_input("Veuillez insérer l'URL de la page ici :", "")
 
 LOGO_FILE_NAME = "logo LPETH avril 2016.png"
 

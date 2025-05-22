@@ -104,6 +104,14 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         image_id = uploaded_file.get('id')
         st.success(f"Image QR code uploadée sur Google Drive : {image_id}")
 
+        # NOUVEAU : Rendre l'image publiquement accessible
+        permission = {
+            'type': 'anyone',
+            'role': 'reader'
+        }
+        drive_service.permissions().create(fileId=image_id, body=permission, fields='id').execute()
+        st.info("Image QR code rendue publiquement accessible sur Google Drive.")
+
         # 2. Créer un nouveau Google Doc
         doc_metadata = {'title': doc_title}
         new_doc = docs_service.documents().create(body=doc_metadata).execute()
@@ -113,12 +121,6 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         # 3. Insérer l'image dans le Doc et la formater
         target_size_pt = 141.73
 
-        # Dans la fonction create_and_insert_qr_to_doc
-# ...
-        # 3. Insérer l'image dans le Doc et la formater
-        # Les dimensions en points (PT): 1 pouce = 72 points. 50mm = 5cm = ~1.9685 pouces = 141.73 points
-        target_size_pt = 141.73 # Conserve cette valeur
-
         requests = [
             {
                 'insertImage': {
@@ -127,7 +129,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
                         'index': 1 # Insérer au début du document
                     },
                     'imageProperties': {
-                        'contentUri': f'https://drive.google.com/uc?id={image_id}', # Certains exemples le gardent
+                        'contentUri': f'https://drive.google.com/uc?id={image_id}',
                         'size': {
                             'width': { 'magnitude': target_size_pt, 'unit': 'PT' },
                             'height': { 'magnitude': target_size_pt, 'unit': 'PT' }
@@ -135,10 +137,6 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
                     }
                 }
             },
-            # Centrer horizontalement le paragraphe contenant l'image
-            # Note: Cette requête de centrage n'aura un effet que si l'image est insérée
-            # dans son propre paragraphe. Si l'image est "flottante" ou "inline",
-            # le centrage est parfois plus complexe. Pour l'instant, gardons-la.
             {
                 'updateParagraphStyle': {
                     'range': {
@@ -153,11 +151,6 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
             }
         ]
 
-        # Exécuter les requêtes batch pour mettre à jour le document
-        docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests}).execute()
-        st.success("Code QR inséré et centré horizontalement dans le document.")
-# ...
-
         docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests}).execute()
         st.success("Code QR inséré et centré horizontalement dans le document.")
 
@@ -167,8 +160,6 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
 
     except Exception as e:
         st.error(f"Une erreur est survenue lors de la création ou de l'insertion dans Google Docs : {e}")
-
-
 # --- Interface utilisateur Streamlit ---
 st.set_page_config(
     page_title="Générateur de QR Code LPETH",

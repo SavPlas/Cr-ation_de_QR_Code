@@ -95,7 +95,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
     Crée un Google Doc, insère l'image du QR code et la positionne.
     """
     doc_title = f"QR Code pour {page_url_for_doc}"
-
+    https://script.google.com/a/macros/eduhainaut.be/s/AKfycbzcziq0C6zXiijn9yqiiZG986VaS9hlSNIg8bhD_b34-uGd6jRtxnU9AaG98Lr_fgw/exec
     try:
         # 1. Uploader l'image du QR code vers Google Drive
         file_metadata = {'name': 'qrcode_image.png', 'mimeType': 'image/png'}

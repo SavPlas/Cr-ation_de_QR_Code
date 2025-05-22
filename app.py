@@ -3,7 +3,7 @@ import qrcode
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
-import requests # <-- Assurez-vous que cette ligne est présente !
+import requests # <--- TRÈS IMPORTANT : Assurez-vous que cette ligne est bien présente !
 
 # Google API client libraries
 from google.oauth2 import service_account
@@ -11,9 +11,9 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # --- Configuration des étendues (scopes) pour les APIs Google ---
-# Nous n'avons plus besoin du scope 'documents' pour l'insertion via Python si Apps Script gère ça.
-# Mais vous pouvez le laisser si vous faites d'autres opérations Docs.
-SCOPES = ['https://www.googleapis.com/auth/drive.file']
+# Le scope 'documents' n'est plus nécessaire si l'insertion est gérée par Apps Script,
+# mais vous pouvez le garder si vous faites d'autres opérations avec l'API Docs.
+SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive.file']
 
 # --- Fonction de génération de QR Code avec logo ---
 def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float = 0.25) -> Image.Image:
@@ -100,7 +100,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
     """
     doc_title = f"QR Code pour {page_url_for_doc}"
 
-    # !!! C'EST ICI QUE VOUS COLLEZ L'URL ET L'ASSIGNEZ À LA VARIABLE !!!
+    # !!! C'EST ICI QUE VOUS COLLEZ L'URL ET L'ASSIGNEZ CORRECTEMENT !!!
     APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/a/macros/eduhainaut.be/s/AKfycbzcziq0C6zXiijn9yqiiZG986VaS9hlSNIg8bhD_b34-uGd6jRtxnU9AaG98Lr_fgw/exec"
 
     try:
@@ -126,6 +126,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         st.success(f"Document Google Docs créé : {new_doc.get('title')} (ID: {document_id})")
 
         # 3. Appeler le Google Apps Script pour insérer l'image et centrer
+        # C'EST LA NOUVELLE MÉTHODE QUI REMPLACE L'APPEL DIRECT À L'API DOCS POUR insertImage
         st.info("Appel du Google Apps Script pour insérer l'image dans le document...")
         
         response = requests.post(
@@ -133,14 +134,15 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
             params={'docId': document_id, 'imageId': image_id} 
         )
         
-        response_json = response.json() # Tente de parser la réponse JSON
+        # Tente de parser la réponse JSON du script Apps Script
+        response_json = response.json() 
 
         if response.status_code == 200 and response_json.get('success'):
             st.success("Code QR inséré et centré horizontalement dans le document via Google Apps Script.")
         else:
+            # Affiche l'erreur renvoyée par le script Apps Script ou une erreur générique
             error_message = response_json.get('error', f"Erreur inconnue (Status Code: {response.status_code}, Réponse: {response.text})")
             st.error(f"Erreur lors de l'insertion via Google Apps Script : {error_message}")
-
 
         doc_link = f"https://docs.google.com/document/d/{document_id}/edit"
         st.markdown(f"**Document Google Docs généré :** [Ouvrir le document]({doc_link})")
@@ -204,16 +206,3 @@ if page_url:
                         docs_service, drive_service = get_google_service()
                         # Préparer le buffer pour l'upload Google Docs
                         upload_buffer = io.BytesIO()
-                        qr_image_final.save(upload_buffer, format="PNG")
-                        upload_buffer.seek(0) # Rembobiner le buffer pour l'upload
-
-                        # Passer le buffer à la fonction create_and_insert_qr_to_doc
-                        create_and_insert_qr_to_doc(docs_service, drive_service, upload_buffer, page_url)
-                    except Exception as e:
-                        st.error(f"Échec de l'initialisation des services Google ou de la création du document : {e}")
-
-else:
-    st.warning("Veuillez insérer une URL ci-dessus pour générer le code QR.")
-
-st.markdown("---")
-st.markdown("Développé avec ❤️ pour LPETH via Streamlit et Google APIs")

@@ -113,18 +113,22 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         # 3. Insérer l'image dans le Doc et la formater
         target_size_pt = 141.73
 
+        # Dans la fonction create_and_insert_qr_to_doc
+# ...
+        # 3. Insérer l'image dans le Doc et la formater
+        # Les dimensions en points (PT): 1 pouce = 72 points. 50mm = 5cm = ~1.9685 pouces = 141.73 points
+        target_size_pt = 141.73 # Conserve cette valeur
+
         requests = [
-            # Insérer l'image au début du document
             {
                 'insertImage': {
                     'uri': f'https://drive.google.com/uc?id={image_id}',
                     'location': {
-                        'segmentId': '',
-                        'index': 1
+                        'index': 1 # Insérer au début du document
                     },
-                    'imageProperties': { # Ceci doit être un objet ImageProperties
-                        'contentUri': f'https://drive.google.com/uc?id={image_id}',
-                        'size': { # Ceci doit être un objet Size
+                    'imageProperties': {
+                        'contentUri': f'https://drive.google.com/uc?id={image_id}', # Certains exemples le gardent
+                        'size': {
                             'width': { 'magnitude': target_size_pt, 'unit': 'PT' },
                             'height': { 'magnitude': target_size_pt, 'unit': 'PT' }
                         }
@@ -132,10 +136,12 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
                 }
             },
             # Centrer horizontalement le paragraphe contenant l'image
+            # Note: Cette requête de centrage n'aura un effet que si l'image est insérée
+            # dans son propre paragraphe. Si l'image est "flottante" ou "inline",
+            # le centrage est parfois plus complexe. Pour l'instant, gardons-la.
             {
                 'updateParagraphStyle': {
                     'range': {
-                        'segmentId': '',
                         'startIndex': 1,
                         'endIndex': 2
                     },
@@ -146,6 +152,11 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
                 }
             }
         ]
+
+        # Exécuter les requêtes batch pour mettre à jour le document
+        docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests}).execute()
+        st.success("Code QR inséré et centré horizontalement dans le document.")
+# ...
 
         docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests}).execute()
         st.success("Code QR inséré et centré horizontalement dans le document.")

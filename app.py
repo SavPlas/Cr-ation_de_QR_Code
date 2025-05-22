@@ -3,7 +3,7 @@ import qrcode
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
-import requests # <--- TRÈS IMPORTANT : Assurez-vous que cette ligne est bien présente !
+import requests # Indispensable pour appeler l'Apps Script !
 
 # Google API client libraries
 from google.oauth2 import service_account
@@ -11,8 +11,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # --- Configuration des étendues (scopes) pour les APIs Google ---
-# Le scope 'documents' n'est plus nécessaire si l'insertion est gérée par Apps Script,
-# mais vous pouvez le garder si vous faites d'autres opérations avec l'API Docs.
+# Le scope 'documents' est conservé ici car `docs_service` est toujours utilisé pour créer le document.
 SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive.file']
 
 # --- Fonction de génération de QR Code avec logo ---
@@ -40,20 +39,26 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
 
     logo = Image.open(logo_path).convert("RGBA")
 
+    # Calcul de la taille du logo en fonction du ratio
     logo_target_width = int(qr_width * logo_size_ratio)
     logo_target_height = int(qr_height * logo_size_ratio)
 
+    # Redimensionnement du logo avec LANCZOS (meilleure qualité)
     logo.thumbnail((logo_target_width, logo_target_height), Image.LANCZOS)
 
+    # Création d'un masque rond pour le logo
     mask = Image.new('L', logo.size, 0)
     draw_mask = ImageDraw.Draw(mask)
     draw_mask.ellipse((0, 0, logo.width, logo.height), fill=255)
 
+    # Appliquer le masque pour arrondir le logo
     rounded_logo = Image.new('RGBA', logo.size, (0, 0, 0, 0))
     rounded_logo.paste(logo, (0, 0), mask)
 
+    # Calcul de la position du logo au centre du QR code
     pos = ((qr_width - rounded_logo.width) // 2, (qr_height - rounded_logo.height) // 2)
 
+    # Coller le logo sur le QR code
     qr_img.paste(rounded_logo, pos, rounded_logo)
 
     return qr_img
@@ -100,7 +105,9 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
     """
     doc_title = f"QR Code pour {page_url_for_doc}"
 
-    # !!! C'EST ICI QUE VOUS COLLEZ L'URL ET L'ASSIGNEZ CORRECTEMENT !!!
+    # !!! L'URL DE VOTRE GOOGLE APPS SCRIPT DÉPLOYÉ !!!
+    # C'est l'URL que vous obtenez après avoir déployé votre Apps Script en tant qu'Application Web.
+    # Assurez-vous qu'elle est bien celle de votre déploiement actuel.
     APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/a/macros/eduhainaut.be/s/AKfycbzcziq0C6zXiijn9yqiiZG986VaS9hlSNIg8bhD_b34-uGd6jRtxnU9AaG98Lr_fgw/exec"
 
     try:
@@ -126,23 +133,25 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         st.success(f"Document Google Docs créé : {new_doc.get('title')} (ID: {document_id})")
 
         # 3. Appeler le Google Apps Script pour insérer l'image et centrer
-        # C'EST LA NOUVELLE MÉTHODE QUI REMPLACE L'APPEL DIRECT À L'API DOCS POUR insertImage
+        # C'est cette requête HTTP qui va déclencher l'Apps Script pour faire l'insertion
         st.info("Appel du Google Apps Script pour insérer l'image dans le document...")
         
         response = requests.post(
             APPS_SCRIPT_WEB_APP_URL,
+            # Les paramètres 'docId' et 'imageId' sont passés à la fonction doPost() de l'Apps Script
             params={'docId': document_id, 'imageId': image_id} 
         )
         
-        # Tente de parser la réponse JSON du script Apps Script
+        # Le script Apps Script est configuré pour renvoyer un JSON.
         response_json = response.json() 
 
         if response.status_code == 200 and response_json.get('success'):
             st.success("Code QR inséré et centré horizontalement dans le document via Google Apps Script.")
         else:
-            # Affiche l'erreur renvoyée par le script Apps Script ou une erreur générique
+            # Si le script Apps Script renvoie une erreur, nous l'affichons ici.
             error_message = response_json.get('error', f"Erreur inconnue (Status Code: {response.status_code}, Réponse: {response.text})")
             st.error(f"Erreur lors de l'insertion via Google Apps Script : {error_message}")
+
 
         doc_link = f"https://docs.google.com/document/d/{document_id}/edit"
         st.markdown(f"**Document Google Docs généré :** [Ouvrir le document]({doc_link})")
@@ -167,7 +176,7 @@ st.write("Bienvenue ! Entrez l'URL de la page pour laquelle vous souhaitez gén�
 
 page_url = st.text_input("Veuillez insérer l'URL de la page ici :", "")
 
-LOGO_FILE_NAME = "logo LPETH avril 2016.png"
+LOGO_FILE_NAME = "logo LPETH avril 2016.png" # Assurez-vous que ce fichier est au bon endroit !
 
 if page_url:
     st.subheader("Prévisualisation de l'URL :")
@@ -206,3 +215,16 @@ if page_url:
                         docs_service, drive_service = get_google_service()
                         # Préparer le buffer pour l'upload Google Docs
                         upload_buffer = io.BytesIO()
+                        qr_image_final.save(upload_buffer, format="PNG")
+                        upload_buffer.seek(0) # Rembobiner le buffer pour l'upload
+
+                        # Passer le buffer à la fonction create_and_insert_qr_to_doc
+                        create_and_insert_qr_to_doc(docs_service, drive_service, upload_buffer, page_url)
+                    except Exception as e:
+                        st.error(f"Échec de l'initialisation des services Google ou de la création du document : {e}")
+
+else:
+    st.warning("Veuillez insérer une URL ci-dessus pour générer le code QR.")
+
+st.markdown("---")
+st.markdown("Développé avec ❤️ pour LPETH via Streamlit et Google APIs")

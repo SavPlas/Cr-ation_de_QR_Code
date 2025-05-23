@@ -3,7 +3,7 @@ import qrcode
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
-import requests # Indispensable pour appeler l'Apps Script !
+# SUPPRIMÉ : import requests # Indispensable pour appeler l'Apps Script !
 
 # Google API client libraries
 from google.oauth2 import service_account
@@ -11,7 +11,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # --- Configuration des étendues (scopes) pour les APIs Google ---
-# Le scope 'documents' est conservé ici car `docs_service` est toujours utilisé pour créer le document.
+# MODIFIÉ : Le scope 'documents' suffit pour les opérations sur le document lui-même,
+# et 'drive.file' pour gérer le fichier image uploadé.
 SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive.file']
 
 # --- Fonction de génération de QR Code avec logo ---
@@ -68,7 +69,6 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
 
 def get_google_service():
     """Authentifie et retourne les services Google Docs et Drive."""
-    # Liste de toutes les clés attendues dans les secrets pour les identifiants Google
     required_keys = [
         "type", "project_id", "private_key_id", "private_key",
         "client_email", "client_id", "auth_uri", "token_uri",
@@ -76,17 +76,16 @@ def get_google_service():
         "universe_domain"
     ]
 
-    # Vérifiez si toutes les clés nécessaires sont présentes dans st.secrets
     credentials_info = {}
     for key in required_keys:
         if key not in st.secrets:
             st.error(f"Clé manquante dans les secrets Streamlit : '{key}'. "
-                     "Veuillez vérifier votre configuration des secrets (.streamlit/secrets.toml).")
-            st.stop() # Arrête l'exécution de l'application
-        credentials_info[key] = st.secrets[key] # Ajoutez la clé et sa valeur au dictionnaire
+                     "Veuillez vérifier votre configuration des secrets (.streamlit/secrets.toml) "
+                     "et que le fichier n'a pas été poussé sur GitHub.")
+            st.stop()
+        credentials_info[key] = st.secrets[key]
 
     try:
-        # Utiliser from_service_account_info pour authentifier directement depuis le dictionnaire
         creds = service_account.Credentials.from_service_account_info(
             credentials_info, scopes=SCOPES
         )
@@ -98,18 +97,13 @@ def get_google_service():
     drive_service = build('drive', 'v3', credentials=creds)
     return docs_service, drive_service
 
-
+# MODIFIÉ : Nouvelle version de la fonction sans l'appel Apps Script
 def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io.BytesIO, page_url_for_doc: str):
     """
-    Crée un Google Doc, uploade l'image, la rend publique,
-    puis utilise un Google Apps Script pour insérer l'image dans le Doc.
+    Crée un Google Doc, uploade l'image, puis l'insère directement dans le Doc
+    et la centre via l'API Google Docs.
     """
     doc_title = f"QR Code pour {page_url_for_doc}"
-
-    # !!! L'URL DE VOTRE GOOGLE APPS SCRIPT DÉPLOYÉ !!!
-    # C'est l'URL que vous obtenez après avoir déployé votre Apps Script en tant qu'Application Web.
-    # Assurez-vous qu'elle est bien celle de votre déploiement actuel.
-    APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz5ENvHqHkjLCxi8qKsJQ6U5QsjUaM78eMghP3hXgBSz-aWHeXqZVKNi64vprUly3g/exec"
 
     try:
         # 1. Uploader l'image du QR code vers Google Drive
@@ -119,13 +113,15 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         image_id = uploaded_file.get('id')
         st.success(f"Image QR code uploadée sur Google Drive : {image_id}")
 
-        # Rendre l'image publiquement accessible
-        permission = {
-            'type': 'anyone',
-            'role': 'reader'
-        }
-        drive_service.permissions().create(fileId=image_id, body=permission, fields='id').execute()
-        st.info("Image QR code rendue publiquement accessible sur Google Drive.")
+        # Pas besoin de rendre l'image publiquement accessible si le même compte de service
+        # l'insère dans un document qu'il crée. Les permissions sont gérées par le compte de service.
+        # SUPPRIMÉ : Rendre l'image publiquement accessible
+        # permission = {
+        #     'type': 'anyone',
+        #     'role': 'reader'
+        # }
+        # drive_service.permissions().create(fileId=image_id, body=permission, fields='id').execute()
+        # st.info("Image QR code rendue publiquement accessible sur Google Drive.") # Cette ligne est maintenant obsolète
 
         # 2. Créer un nouveau Google Doc
         doc_metadata = {'title': doc_title}
@@ -133,26 +129,47 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         document_id = new_doc.get('documentId')
         st.success(f"Document Google Docs créé : {new_doc.get('title')} (ID: {document_id})")
 
-        # 3. Appeler le Google Apps Script pour insérer l'image et centrer
-        # C'est cette requête HTTP qui va déclencher l'Apps Script pour faire l'insertion
-        st.info("Appel du Google Apps Script pour insérer l'image dans le document...")
-        
-        response = requests.post(
-            APPS_SCRIPT_WEB_APP_URL,
-            # MODIFICATION CLÉ : Utilisation de 'json' pour envoyer un payload JSON
-            json={'docId': document_id, 'imageId': image_id} 
-        )
-        
-        # Le script Apps Script est configuré pour renvoyer un JSON.
-        response_json = response.json() 
+        # 3. Insérer l'image et la centrer directement via l'API Docs
+        st.info("Insertion de l'image dans le document Google Docs...")
 
-        if response.status_code == 200 and response_json.get('success'):
-            st.success("Code QR inséré et centré horizontalement dans le document via Google Apps Script.")
-        else:
-            # Si le script Apps Script renvoie une erreur, nous l'affichons ici.
-            error_message = response_json.get('error', f"Erreur inconnue (Code de statut : {response.status_code}, Réponse : {response.text})")
-            st.error(f"Erreur lors de l'insertion via Google Apps Script : {error_message}")
+        requests_body = [
+            {
+                'insertInlineImage': {
+                    'uri': f'https://drive.google.com/uc?id={image_id}', # Utilise l'ID de l'image Drive
+                    'location': {
+                        'segmentId': '', # Vide pour insérer à la fin du document
+                        'index': 1      # Insère au début du corps du document (après le titre)
+                    },
+                    'objectSize': { # Optionnel: Ajustez la taille si l'image est trop grande par défaut
+                        'width': {
+                            'magnitude': 300, # Exemple: 300 points (1/72e de pouce)
+                            'unit': 'PT'
+                        },
+                        'height': {
+                            'magnitude': 300,
+                            'unit': 'PT'
+                        }
+                    }
+                }
+            },
+            {
+                'updateParagraphStyle': {
+                    'range': {
+                        'segmentId': '',
+                        'startIndex': 1,
+                        'endIndex': 2 # Assurez-vous que l'image est dans ce paragraphe
+                    },
+                    'paragraphStyle': {
+                        'alignment': 'CENTER'
+                    },
+                    'fields': 'alignment'
+                }
+            }
+        ]
 
+        # Exécuter les requêtes batch (insertion + centrage)
+        docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests_body}).execute()
+        st.success("Code QR inséré et centré horizontalement dans le document.")
 
         doc_link = f"https://docs.google.com/document/d/{document_id}/edit"
         st.markdown(f"**Document Google Docs généré :** [Ouvrir le document]({doc_link})")
@@ -173,7 +190,7 @@ st.title("Générateur de QR Code avec logo LPETH et création Google Docs")
 st.markdown("---")
 
 st.write("Bienvenue ! Entrez l'URL de la page pour laquelle vous souhaitez générer un code QR. "
-         "Le logo LPETH sera inséré et un nouveau document Google Docs pourra être créé avec le QR code.")
+          "Le logo LPETH sera inséré et un nouveau document Google Docs pourra être créé avec le QR code.")
 
 page_url = st.text_input("Veuillez insérer l'URL de la page ici :", "")
 
@@ -229,4 +246,3 @@ else:
 
 st.markdown("---")
 st.markdown("Développé avec ❤️ pour LPETH via Streamlit et Google APIs")
-

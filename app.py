@@ -3,7 +3,6 @@ import qrcode
 from PIL import Image, ImageDraw, ImageFont
 import io
 import os
-# SUPPRIMÉ : import requests # Indispensable pour appeler l'Apps Script !
 
 # Google API client libraries
 from google.oauth2 import service_account
@@ -11,8 +10,8 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # --- Configuration des étendues (scopes) pour les APIs Google ---
-# MODIFIÉ : Le scope 'documents' suffit pour les opérations sur le document lui-même,
-# et 'drive.file' pour gérer le fichier image uploadé.
+# 'drive.file' permet à l'application de gérer uniquement les fichiers qu'elle crée ou ouvre.
+# 'documents' permet de créer et modifier des documents Google Docs.
 SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive.file']
 
 # --- Fonction de génération de QR Code avec logo ---
@@ -22,7 +21,7 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
     """
     qr = qrcode.QRCode(
         version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        error_correction=qrcode.constants.ERROR_CORRECT_H, # Haute correction d'erreur pour insérer un logo
         box_size=10,
         border=4,
     )
@@ -36,8 +35,8 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
     if not os.path.exists(logo_path):
         st.error(f"Erreur : Le fichier logo '{logo_path}' est introuvable. "
                  "Veuillez vous assurer qu'il est dans le même répertoire que app.py "
-                 "et que le nom est exact.")
-        return qr_img
+                 "et que le nom est exact sur GitHub.")
+        return qr_img # Retourne le QR code sans logo si le logo est introuvable
 
     logo = Image.open(logo_path).convert("RGBA")
 
@@ -45,7 +44,7 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
     logo_target_width = int(qr_width * logo_size_ratio)
     logo_target_height = int(qr_height * logo_size_ratio)
 
-    # Redimensionnement du logo avec LANCZOS (meilleure qualité)
+    # Redimensionnement du logo avec LANCZOS (meilleure qualité pour la réduction)
     logo.thumbnail((logo_target_width, logo_target_height), Image.LANCZOS)
 
     # Création d'un masque rond pour le logo
@@ -67,8 +66,12 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
 
 # --- Fonctions pour l'intégration Google Docs/Drive API ---
 
+@st.cache_resource
 def get_google_service():
-    """Authentifie et retourne les services Google Docs et Drive."""
+    """
+    Authentifie et retourne les services Google Docs et Drive.
+    Utilise st.cache_resource pour éviter de recréer les services à chaque réexécution.
+    """
     required_keys = [
         "type", "project_id", "private_key_id", "private_key",
         "client_email", "client_id", "auth_uri", "token_uri",
@@ -82,7 +85,7 @@ def get_google_service():
             st.error(f"Clé manquante dans les secrets Streamlit : '{key}'. "
                      "Veuillez vérifier votre configuration des secrets (.streamlit/secrets.toml) "
                      "et que le fichier n'a pas été poussé sur GitHub.")
-            st.stop()
+            st.stop() # Arrête l'exécution de l'application si les secrets sont manquants
         credentials_info[key] = st.secrets[key]
 
     try:
@@ -97,11 +100,11 @@ def get_google_service():
     drive_service = build('drive', 'v3', credentials=creds)
     return docs_service, drive_service
 
-# MODIFIÉ : Nouvelle version de la fonction sans l'appel Apps Script
+
 def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io.BytesIO, page_url_for_doc: str):
     """
-    Crée un Google Doc, uploade l'image, puis l'insère directement dans le Doc
-    et la centre via l'API Google Docs.
+    Crée un Google Doc, uploade l'image, la rend publique,
+    puis l'insère directement dans le Doc et la centre via l'API Google Docs.
     """
     doc_title = f"QR Code pour {page_url_for_doc}"
 
@@ -113,15 +116,14 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         image_id = uploaded_file.get('id')
         st.success(f"Image QR code uploadée sur Google Drive : {image_id}")
 
-        # Pas besoin de rendre l'image publiquement accessible si le même compte de service
-        # l'insère dans un document qu'il crée. Les permissions sont gérées par le compte de service.
-        # SUPPRIMÉ : Rendre l'image publiquement accessible
-        # permission = {
-        #     'type': 'anyone',
-        #     'role': 'reader'
-        # }
-        # drive_service.permissions().create(fileId=image_id, body=permission, fields='id').execute()
-        # st.info("Image QR code rendue publiquement accessible sur Google Drive.") # Cette ligne est maintenant obsolète
+        # Rendre l'image publiquement accessible pour l'API Docs.
+        # C'est nécessaire car l'API Docs la récupère via une URL publique.
+        permission = {
+            'type': 'anyone',
+            'role': 'reader'
+        }
+        drive_service.permissions().create(fileId=image_id, body=permission, fields='id').execute()
+        st.info("Image QR code rendue publiquement accessible sur Google Drive.")
 
         # 2. Créer un nouveau Google Doc
         doc_metadata = {'title': doc_title}
@@ -135,14 +137,14 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         requests_body = [
             {
                 'insertInlineImage': {
-                    'uri': f'https://drive.google.com/uc?id={image_id}', # Utilise l'ID de l'image Drive
+                    'uri': f'https://drive.google.com/uc?id={image_id}', # URL de l'image Drive
                     'location': {
-                        'segmentId': '', # Vide pour insérer à la fin du document
-                        'index': 1      # Insère au début du corps du document (après le titre)
+                        'segmentId': '', # Insère à la fin du document par défaut
+                        'index': 1       # Index 1 place le contenu juste après le titre/en-tête
                     },
-                    'objectSize': { # Optionnel: Ajustez la taille si l'image est trop grande par défaut
+                    'objectSize': { # Ajuste la taille de l'image pour qu'elle soit bien visible
                         'width': {
-                            'magnitude': 300, # Exemple: 300 points (1/72e de pouce)
+                            'magnitude': 300, # 300 points (1 point = 1/72 pouce)
                             'unit': 'PT'
                         },
                         'height': {
@@ -157,7 +159,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
                     'range': {
                         'segmentId': '',
                         'startIndex': 1,
-                        'endIndex': 2 # Assurez-vous que l'image est dans ce paragraphe
+                        'endIndex': 2 # Le paragraphe contenant l'image insérée à l'index 1
                     },
                     'paragraphStyle': {
                         'alignment': 'CENTER'

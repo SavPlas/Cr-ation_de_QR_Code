@@ -10,8 +10,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # --- Configuration des étendues (scopes) pour les APIs Google ---
-# 'drive.file' permet à l'application de gérer uniquement les fichiers qu'elle crée ou ouvre.
-# 'documents' permet de créer et modifier des documents Google Docs.
 SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive.file']
 
 # --- Fonction de génération de QR Code avec logo ---
@@ -21,7 +19,7 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
     """
     qr = qrcode.QRCode(
         version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_H, # Haute correction d'erreur pour insérer un logo
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
         box_size=10,
         border=4,
     )
@@ -31,35 +29,25 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     qr_width, qr_height = qr_img.size
 
-    # Vérifie si le fichier logo existe
     if not os.path.exists(logo_path):
         st.error(f"Erreur : Le fichier logo '{logo_path}' est introuvable. "
                  "Veuillez vous assurer qu'il est dans le même répertoire que app.py "
                  "et que le nom est exact sur GitHub.")
-        return qr_img # Retourne le QR code sans logo si le logo est introuvable
+        return qr_img
 
     logo = Image.open(logo_path).convert("RGBA")
-
-    # Calcul de la taille du logo en fonction du ratio
     logo_target_width = int(qr_width * logo_size_ratio)
     logo_target_height = int(qr_height * logo_size_ratio)
-
-    # Redimensionnement du logo avec LANCZOS (meilleure qualité pour la réduction)
     logo.thumbnail((logo_target_width, logo_target_height), Image.LANCZOS)
 
-    # Création d'un masque rond pour le logo
     mask = Image.new('L', logo.size, 0)
     draw_mask = ImageDraw.Draw(mask)
     draw_mask.ellipse((0, 0, logo.width, logo.height), fill=255)
 
-    # Appliquer le masque pour arrondir le logo
     rounded_logo = Image.new('RGBA', logo.size, (0, 0, 0, 0))
     rounded_logo.paste(logo, (0, 0), mask)
 
-    # Calcul de la position du logo au centre du QR code
     pos = ((qr_width - rounded_logo.width) // 2, (qr_height - rounded_logo.height) // 2)
-
-    # Coller le logo sur le QR code
     qr_img.paste(rounded_logo, pos, rounded_logo)
 
     return qr_img
@@ -85,7 +73,7 @@ def get_google_service():
             st.error(f"Clé manquante dans les secrets Streamlit : '{key}'. "
                      "Veuillez vérifier votre configuration des secrets (.streamlit/secrets.toml) "
                      "et que le fichier n'a pas été poussé sur GitHub.")
-            st.stop() # Arrête l'exécution de l'application si les secrets sont manquants
+            st.stop()
         credentials_info[key] = st.secrets[key]
 
     try:
@@ -107,6 +95,9 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
     puis l'insère directement dans le Doc et la centre via l'API Google Docs.
     """
     doc_title = f"QR Code pour {page_url_for_doc}"
+    # VOTRE ADRESSE E-MAIL À PARTAGER AVEC LE DOCUMENT
+    # REMPLACEZ 'votre.email@exemple.com' PAR 'savery.plasman@eduhainaut.be'
+    YOUR_EMAIL_FOR_DOC_ACCESS = "savery.plasman@eduhainaut.be"
 
     try:
         # 1. Uploader l'image du QR code vers Google Drive
@@ -131,20 +122,38 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         document_id = new_doc.get('documentId')
         st.success(f"Document Google Docs créé : {new_doc.get('title')} (ID: {document_id})")
 
+        # NOUVEAU BLOC : Partager le document avec votre adresse e-mail
+        if YOUR_EMAIL_FOR_DOC_ACCESS:
+            permission_to_share_with_user = {
+                'type': 'user',
+                'role': 'writer', # Ou 'reader' si vous voulez seulement lire
+                'emailAddress': YOUR_EMAIL_FOR_DOC_ACCESS
+            }
+            try:
+                drive_service.permissions().create(
+                    fileId=document_id,
+                    body=permission_to_share_with_user,
+                    sendNotificationEmail=False # Pour ne pas recevoir un email à chaque création
+                ).execute()
+                st.info(f"Document partagé avec {YOUR_EMAIL_FOR_DOC_ACCESS}.")
+            except Exception as e:
+                st.warning(f"Impossible de partager le document avec {YOUR_EMAIL_FOR_DOC_ACCESS}. "
+                           f"Vérifiez que votre compte de service a la permission de partager des fichiers Drive. Erreur: {e}")
+
         # 3. Insérer l'image et la centrer directement via l'API Docs
         st.info("Insertion de l'image dans le document Google Docs...")
 
         requests_body = [
             {
                 'insertInlineImage': {
-                    'uri': f'https://drive.google.com/uc?id={image_id}', # URL de l'image Drive
+                    'uri': f'https://drive.google.com/uc?id={image_id}',
                     'location': {
-                        'segmentId': '', # Insère à la fin du document par défaut
-                        'index': 1       # Index 1 place le contenu juste après le titre/en-tête
+                        'segmentId': '',
+                        'index': 1
                     },
-                    'objectSize': { # Ajuste la taille de l'image pour qu'elle soit bien visible
+                    'objectSize': {
                         'width': {
-                            'magnitude': 300, # 300 points (1 point = 1/72 pouce)
+                            'magnitude': 300,
                             'unit': 'PT'
                         },
                         'height': {
@@ -159,7 +168,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
                     'range': {
                         'segmentId': '',
                         'startIndex': 1,
-                        'endIndex': 2 # Le paragraphe contenant l'image insérée à l'index 1
+                        'endIndex': 2
                     },
                     'paragraphStyle': {
                         'alignment': 'CENTER'
@@ -169,7 +178,6 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
             }
         ]
 
-        # Exécuter les requêtes batch (insertion + centrage)
         docs_service.documents().batchUpdate(documentId=document_id, body={'requests': requests_body}).execute()
         st.success("Code QR inséré et centré horizontalement dans le document.")
 

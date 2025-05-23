@@ -29,10 +29,16 @@ def generate_qr_code_with_logo(url: str, logo_path: str, logo_size_ratio: float 
     qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     qr_width, qr_height = qr_img.size
 
+    # Vérifiez si le fichier logo existe. Pour les déploiements Streamlit,
+    # le fichier doit être à la racine du dépôt ou dans un sous-dossier spécifié.
+    # st.runtime.get_instance() est une astuce pour vérifier l'environnement de déploiement
+    # mais os.path.exists est la vérification directe.
     if not os.path.exists(logo_path):
         st.error(f"Erreur : Le fichier logo '{logo_path}' est introuvable. "
                  "Veuillez vous assurer qu'il est dans le même répertoire que app.py "
-                 "et que le nom est exact sur GitHub.")
+                 "sur votre dépôt GitHub.")
+        # Retourne le QR code sans logo pour éviter de bloquer l'application
+        # mais signale le problème.
         return qr_img
 
     logo = Image.open(logo_path).convert("RGBA")
@@ -59,6 +65,7 @@ def get_google_service():
     """
     Authentifie et retourne les services Google Docs et Drive.
     Utilise st.cache_resource pour éviter de recréer les services à chaque réexécution.
+    Les identifiants sont récupérés depuis st.secrets sous la section 'google_service_account'.
     """
     required_keys = [
         "type", "project_id", "private_key_id", "private_key",
@@ -68,21 +75,35 @@ def get_google_service():
     ]
 
     credentials_info = {}
+    
+    # Vérification que la section 'google_service_account' existe
+    if "google_service_account" not in st.secrets:
+        st.error("Erreur de configuration des secrets : La section '[google_service_account]' est manquante. "
+                 "Veuillez vous assurer que votre fichier secrets.toml sur Streamlit Cloud "
+                 "contient cette section et toutes les clés de votre compte de service Google.")
+        st.stop() # Arrête l'exécution de l'application si les secrets ne sont pas configurés
+
+    # Récupération des clés sous la section 'google_service_account'
     for key in required_keys:
-        if key not in st.secrets:
-            st.error(f"Clé manquante dans les secrets Streamlit : '{key}'. "
-                     "Veuillez vérifier votre configuration des secrets (.streamlit/secrets.toml) "
-                     "et que le fichier n'a pas été poussé sur GitHub.")
-            st.stop()
-        credentials_info[key] = st.secrets[key]
+        if key not in st.secrets["google_service_account"]:
+            st.error(f"Erreur de configuration des secrets : La clé '{key}' est manquante "
+                     f"dans la section '[google_service_account]'. "
+                     "Veuillez vérifier votre fichier secrets.toml sur Streamlit Cloud.")
+            st.stop() # Arrête l'exécution si une clé spécifique est manquante
+        credentials_info[key] = st.secrets["google_service_account"][key]
 
     try:
+        # La clé privée doit être traitée pour remplacer les '\n' par de vrais retours à la ligne
+        # si elle a été stockée en ligne échappée, mais avec les triples guillemets en TOML,
+        # elle devrait déjà être correcte. Cependant, une vérification peut être utile.
+        # Assurez-vous que la clé privée ne contient pas de guillemets supplémentaires ou d'espaces.
         creds = service_account.Credentials.from_service_account_info(
             credentials_info, scopes=SCOPES
         )
     except Exception as e:
-        st.error(f"Erreur lors de la création des identifiants Google : {e}")
-        st.stop()
+        st.error(f"Erreur lors de la création des identifiants Google. "
+                 f"Vérifiez le format de votre clé privée et l'ensemble des informations de votre compte de service. Détail : {e}")
+        st.stop() # Arrête l'exécution si l'authentification échoue
 
     docs_service = build('docs', 'v1', credentials=creds)
     drive_service = build('drive', 'v3', credentials=creds)
@@ -95,17 +116,16 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
     puis l'insère directement dans le Doc et la centre via l'API Google Docs.
     """
     doc_title = f"QR Code pour {page_url_for_doc}"
-    # VOTRE ADRESSE E-MAIL À PARTAGER AVEC LE DOCUMENT
-    # REMPLACEZ 'votre.email@exemple.com' PAR 'savery.plasman@eduhainaut.be'
-    YOUR_EMAIL_FOR_DOC_ACCESS = "savery.plasman@eduhainaut.be"
+    # ADRESSE E-MAIL À PARTAGER AVEC LE DOCUMENT (à remplacer ou obtenir via secrets si elle change)
+    YOUR_EMAIL_FOR_DOC_ACCESS = "savery.plasman@eduhainaut.be" # Gardé en dur pour votre cas d'usage spécifique
 
     try:
         # 1. Uploader l'image du QR code vers Google Drive
-        file_metadata = {'name': 'qrcode_image.png', 'mimeType': 'image/png'}
+        file_metadata = {'name': f'qrcode_{doc_title.replace(" ", "_")}.png', 'mimeType': 'image/png'}
         media = MediaIoBaseUpload(qr_image_buffer, mimetype='image/png', resumable=True)
         uploaded_file = drive_service.files().create(body=file_metadata, media_body=media, fields='id').execute()
         image_id = uploaded_file.get('id')
-        st.success(f"Image QR code uploadée sur Google Drive : {image_id}")
+        st.success(f"Image QR code uploadée sur Google Drive : {uploaded_file.get('name')} (ID: {image_id})")
 
         # Rendre l'image publiquement accessible pour l'API Docs.
         # C'est nécessaire car l'API Docs la récupère via une URL publique.
@@ -122,7 +142,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
         document_id = new_doc.get('documentId')
         st.success(f"Document Google Docs créé : {new_doc.get('title')} (ID: {document_id})")
 
-        # NOUVEAU BLOC : Partager le document avec votre adresse e-mail
+        # Partager le document avec l'adresse e-mail spécifiée
         if YOUR_EMAIL_FOR_DOC_ACCESS:
             permission_to_share_with_user = {
                 'type': 'user',
@@ -149,7 +169,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
                     'uri': f'https://drive.google.com/uc?id={image_id}',
                     'location': {
                         'segmentId': '',
-                        'index': 1
+                        'index': 1 # Insère l'image au début du document
                     },
                     'objectSize': {
                         'width': {
@@ -167,7 +187,7 @@ def create_and_insert_qr_to_doc(docs_service, drive_service, qr_image_buffer: io
                 'updateParagraphStyle': {
                     'range': {
                         'segmentId': '',
-                        'startIndex': 1,
+                        'startIndex': 1, # Applique le style au paragraphe contenant l'image
                         'endIndex': 2
                     },
                     'paragraphStyle': {
@@ -204,7 +224,8 @@ st.write("Bienvenue ! Entrez l'URL de la page pour laquelle vous souhaitez gén�
 
 page_url = st.text_input("Veuillez insérer l'URL de la page ici :", "")
 
-LOGO_FILE_NAME = "logo LPETH avril 2016.png" # Assurez-vous que ce fichier est au bon endroit !
+# Le nom du fichier logo. Assurez-vous que ce fichier est présent dans votre dépôt GitHub à la racine.
+LOGO_FILE_NAME = "image_74db4d.png" 
 
 if page_url:
     st.subheader("Prévisualisation de l'URL :")
